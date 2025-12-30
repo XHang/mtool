@@ -3,6 +3,7 @@ using Playnite.SDK.Models;
 using Playnite.SDK.Plugins;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -12,95 +13,120 @@ namespace AutoInjectPlugin
 {
     public class AutoInjectPlugin : GenericPlugin
     {
+
+
         public override Guid Id { get; } = Guid.Parse("7E9E6F34-2B1A-4C9F-9C2C-1C7E8D3A1234");
 
-        private readonly AutoInjectSettingsViewModel settings;
+        private readonly AutoInjectSettingsViewModel settingss;
 
         // 记录已经处理过的游戏
         private readonly HashSet<Guid> processedGames = new HashSet<Guid>();
 
-        private bool running = true;
+        
 
         public AutoInjectPlugin(IPlayniteAPI api) : base(api)
         {
-            settings = new AutoInjectSettingsViewModel(this);
+            settingss = new AutoInjectSettingsViewModel(this);
 
             Properties = new GenericPluginProperties
             {
                 HasSettings = true
             };
-
-            // 确认插件加载
-            PlayniteApi.Dialogs.ShowMessage("插件已加载");
-
-            // 初始化已存在的游戏，避免对旧库弹窗
-            foreach (var game in PlayniteApi.Database.Games)
-            {
-                processedGames.Add(game.Id);
-            }
-
-            // 启动后台线程轮询数据库
-            var thread = new Thread(DatabaseWatcher);
-            thread.IsBackground = true;
-            thread.Start();
         }
-
-        private void DatabaseWatcher()
+        public override IEnumerable<GameMenuItem> GetGameMenuItems(GetGameMenuItemsArgs args)
         {
-            while (running)
+            if (!args.Games.Any())
+                return null;
+
+            return new List<GameMenuItem>
             {
-                Thread.Sleep(1000); // 每秒检查一次
-
-                var allGames = PlayniteApi.Database.Games.ToList();
-
-                foreach (var game in allGames)
+                new GameMenuItem
                 {
-                    if (!processedGames.Contains(game.Id))
-                    {
-                        processedGames.Add(game.Id);
-                        HandleNewGame(game);
-                    }
+                    Description = "使用 MTool 注入器启动（配置此游戏）",
+                    Action = a => ConfigureGameForInject(args.Games.First())
                 }
-            }
+            };
         }
-
-        private void HandleNewGame(Game game)
+        private void ConfigureGameForInject(Game game)
         {
-            if (game == null)
-                return;
+            var settings = settingss.Settings;
 
-            if (game.GameActions == null || game.GameActions.Count == 0)
-                return;
-
-            var originalExe = game.GameActions[0].Path;
-            if (string.IsNullOrEmpty(originalExe) || !File.Exists(originalExe))
-                return;
-
+            // 弹出确认框
             var result = PlayniteApi.Dialogs.ShowMessage(
-                "是否要配置 MTool 注入？",
-                "MTool 注入",
+                $"你是否要把《{game.Name}》改为注入器启动？",
+                "注入器配置",
                 MessageBoxButton.YesNo
             );
 
-            if (result == MessageBoxResult.No)
+            if (result != MessageBoxResult.Yes)
                 return;
 
-            var exeDir = Path.GetDirectoryName(originalExe);
+            // ⭐ 用户点 YES 后才检查配置是否完整
+            if (string.IsNullOrWhiteSpace(settings.InjectorPath) ||
+                string.IsNullOrWhiteSpace(settings.DllPath) ||
+                string.IsNullOrWhiteSpace(settings.NwPath))
+            {
+                PlayniteApi.Dialogs.ShowErrorMessage(
+                    "请先配置注入路径（inject.exe、mzHook.dll、nw.exe）。",
+                    "配置不完整"
+                );
+                return;
+            }
 
-            game.GameActions[0].Path = settings.Settings.InjectorPath;
-            game.GameActions[0].Arguments =
-                $"\"{originalExe}\" \"{settings.Settings.DllPath}\"";
-            game.GameActions[0].WorkingDir = exeDir;
+            // 获取原始 Play Action
+            var action = game.GameActions?.FirstOrDefault();
+            if (action == null)
+            {
+                PlayniteApi.Dialogs.ShowErrorMessage(
+                    "该游戏没有启动动作，无法配置。",
+                    "注入器配置失败"
+                );
+                return;
+            }
 
-            game.PostScript =
-$@"Start-Process ""{settings.Settings.NwPath}"" -ArgumentList """"{settings.Settings.NwDir}""""";
+            string gameExe = action.Path;
 
-            PlayniteApi.Database.Games.Update(game);
+            // 使用配置化路径
+            string injectExe = settings.InjectorPath;
+            string dllPath = settings.DllPath;
+            string nwExe = settings.NwPath;
+            string nwDir = string.IsNullOrWhiteSpace(settings.NwDir)
+                ? Path.GetDirectoryName(settings.NwPath)
+                : settings.NwDir;
+
+            // 修改 Play Action（必须用 ObservableCollection）
+            game.GameActions = new ObservableCollection<GameAction>
+    {
+        new GameAction
+        {
+            Name = "Play (MTool Inject)",
+            Type = GameActionType.File,
+            Path = injectExe,
+            Arguments = $"\"{gameExe}\" \"{dllPath}\"",
+            WorkingDir = Path.GetDirectoryName(injectExe)
         }
+    };
+
+            // 修改启动后脚本（使用配置）
+            game.GameStartedScript =
+        $@"Start-Process ""{nwExe}"" `
+    -WorkingDirectory ""{nwDir}""";
+
+            // 禁用全局脚本
+            game.UseGlobalPostScript = false;
+
+            // 保存修改
+            PlayniteApi.Database.Games.Update(game);
+
+            PlayniteApi.Dialogs.ShowMessage("配置完成！");
+        }
+
+
+
 
         public override ISettings GetSettings(bool firstRunSettings)
         {
-            return settings;
+            return settingss;
         }
 
         public override System.Windows.Controls.UserControl GetSettingsView(bool firstRunSettings)
@@ -108,8 +134,5 @@ $@"Start-Process ""{settings.Settings.NwPath}"" -ArgumentList """"{settings.Sett
             return new AutoInjectSettingsView();
         }
 
-        // 如果你以后找到了 Plugin 里 OnApplicationStopped 的准确签名，
-        // 可以在这里把 running = false，优雅结束线程。
-        // 目前靠进程退出自然结束也没问题。
     }
 }
