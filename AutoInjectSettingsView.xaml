@@ -10,6 +10,9 @@
         <TextBlock Text="DLL Path" />
         <TextBox Text="{Binding Settings.DllPath}" Margin="0,5,0,10" />
 
+        <TextBlock Text="DLL32 Path" />
+        <TextBox Text="{Binding Settings.DllPath32}" Margin="0,5,0,10" />
+
         <TextBlock Text="nw.exe Path" />
         <TextBox Text="{Binding Settings.NwPath}" Margin="0,5,0,10" />
 

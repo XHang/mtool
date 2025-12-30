@@ -60,12 +60,12 @@ namespace AutoInjectPlugin
             if (result != MessageBoxResult.Yes)
                 return;
 
+            // 先检查注入器和 nw.exe 是否配置
             if (string.IsNullOrWhiteSpace(settings.InjectorPath) ||
-                string.IsNullOrWhiteSpace(settings.DllPath) ||
                 string.IsNullOrWhiteSpace(settings.NwPath))
             {
                 PlayniteApi.Dialogs.ShowErrorMessage(
-                    "请先配置注入路径（inject.exe、mzHook.dll、nw.exe）。",
+                    "请先配置注入路径（inject.exe、nw.exe）。",
                     "配置不完整"
                 );
                 return;
@@ -81,10 +81,22 @@ namespace AutoInjectPlugin
                 return;
             }
 
+            // 原始 Path（可能带 {InstallDir}）
             string gameExe = action.Path;
+
+            // 如果包含 {InstallDir}，替换为实际 Installation Folder
+            if (!string.IsNullOrWhiteSpace(game.InstallDirectory) &&
+                gameExe.Contains("{InstallDir}"))
+            {
+                var installDirTrimmed = game.InstallDirectory
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+                gameExe = gameExe.Replace("{InstallDir}", installDirTrimmed);
+            }
+
             string exeName = Path.GetFileName(gameExe);
 
-            // ⭐ 自动改名：使用 InstallationDirectory 的最后两级文件夹名
+            // ⭐ 自动改名逻辑（保持你原来的）
             if (exeName.Equals("Game.exe", StringComparison.OrdinalIgnoreCase) ||
                 exeName.Equals("nw.exe", StringComparison.OrdinalIgnoreCase))
             {
@@ -99,10 +111,8 @@ namespace AutoInjectPlugin
                     string last = parts[parts.Length - 1];
                     string secondLast = parts[parts.Length - 2];
 
-                    // 先按你的规则拼一遍
                     string newName = $"{secondLast}\\{last}";
 
-                    // 然后如果还包含 / 或 \，取最后一段作为真正的显示名
                     if (newName.Contains('\\') || newName.Contains('/'))
                     {
                         var nameParts = newName
@@ -117,13 +127,45 @@ namespace AutoInjectPlugin
                 }
             }
 
+            // ⭐ 用解析后的真正 EXE 路径判断位数
+            bool is32 = IsGame32Bit(gameExe);
+
+            string dllPath;
+
+            if (is32)
+            {
+                if (string.IsNullOrWhiteSpace(settings.DllPath32))
+                {
+                    PlayniteApi.Dialogs.ShowErrorMessage(
+                        "检测到该游戏为 32 位，但你没有配置 32 位 DLL 路径。",
+                        "配置不完整"
+                    );
+                    return;
+                }
+
+                dllPath = settings.DllPath32;
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(settings.DllPath))
+                {
+                    PlayniteApi.Dialogs.ShowErrorMessage(
+                        "检测到该游戏为 64 位，但你没有配置 64 位 DLL 路径。",
+                        "配置不完整"
+                    );
+                    return;
+                }
+
+                dllPath = settings.DllPath;
+            }
+
             string injectExe = settings.InjectorPath;
-            string dllPath = settings.DllPath;
             string nwExe = settings.NwPath;
             string nwDir = string.IsNullOrWhiteSpace(settings.NwDir)
                 ? Path.GetDirectoryName(settings.NwPath)
                 : settings.NwDir;
 
+            // ⭐ 设置新的启动动作
             game.GameActions = new ObservableCollection<GameAction>
     {
         new GameAction
@@ -137,6 +179,7 @@ namespace AutoInjectPlugin
         }
     };
 
+            // ⭐ 设置 GameStartedScript
             game.GameStartedScript =
         $@"Start-Process ""{nwExe}"" `
 -WorkingDirectory ""{nwDir}""";
@@ -159,6 +202,31 @@ namespace AutoInjectPlugin
         public override System.Windows.Controls.UserControl GetSettingsView(bool firstRunSettings)
         {
             return new AutoInjectSettingsView();
+        }
+
+        private bool IsGame32Bit(string exePath)
+        {
+            try
+            {
+                using (var stream = new FileStream(exePath, FileMode.Open, FileAccess.Read))
+                using (var reader = new BinaryReader(stream))
+                {
+                    stream.Seek(0x3C, SeekOrigin.Begin);
+                    int peOffset = reader.ReadInt32();
+
+                    stream.Seek(peOffset + 4, SeekOrigin.Begin);
+                    ushort machine = reader.ReadUInt16();
+
+                    // 0x014C = 32-bit
+                    // 0x8664 = 64-bit
+                    return machine == 0x014C;
+                }
+            }
+            catch
+            {
+                // 读取失败默认按 64 位处理
+                return false;
+            }
         }
 
     }

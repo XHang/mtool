@@ -13,6 +13,10 @@ namespace AutoInjectPlugin
         private string dllPath = "";
         public string DllPath { get => dllPath; set => SetValue(ref dllPath, value); }
 
+        private string dllPath32 = "";
+        public string DllPath32 { get => dllPath32; set => SetValue(ref dllPath32, value); }
+
+
         private string nwPath = "";
         public string NwPath { get => nwPath; set => SetValue(ref nwPath, value); }
 
