@@ -51,7 +51,6 @@ namespace AutoInjectPlugin
         {
             var settings = settingss.Settings;
 
-            // 弹出确认框
             var result = PlayniteApi.Dialogs.ShowMessage(
                 $"你是否要把《{game.Name}》改为注入器启动？",
                 "注入器配置",
@@ -61,7 +60,6 @@ namespace AutoInjectPlugin
             if (result != MessageBoxResult.Yes)
                 return;
 
-            // ⭐ 用户点 YES 后才检查配置是否完整
             if (string.IsNullOrWhiteSpace(settings.InjectorPath) ||
                 string.IsNullOrWhiteSpace(settings.DllPath) ||
                 string.IsNullOrWhiteSpace(settings.NwPath))
@@ -73,7 +71,6 @@ namespace AutoInjectPlugin
                 return;
             }
 
-            // 获取原始 Play Action
             var action = game.GameActions?.FirstOrDefault();
             if (action == null)
             {
@@ -85,8 +82,29 @@ namespace AutoInjectPlugin
             }
 
             string gameExe = action.Path;
+            string exeName = Path.GetFileName(gameExe);
 
-            // 使用配置化路径
+            // ⭐ 自动改名：使用 InstallationDirectory 的最后两级文件夹名
+            if (exeName.Equals("Game.exe", StringComparison.OrdinalIgnoreCase) ||
+                exeName.Equals("nw.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                string installDir = game.InstallDirectory;
+
+                string[] parts = installDir
+                    .TrimEnd(Path.DirectorySeparatorChar)
+                    .Split(Path.DirectorySeparatorChar);
+
+                if (parts.Length >= 2)
+                {
+                    string last = parts[parts.Length - 1];
+                    string secondLast = parts[parts.Length - 2];
+
+                    string newName = $"{secondLast}\\{last}";
+
+                    game.Name = newName;
+                }
+            }
+
             string injectExe = settings.InjectorPath;
             string dllPath = settings.DllPath;
             string nwExe = settings.NwPath;
@@ -94,7 +112,6 @@ namespace AutoInjectPlugin
                 ? Path.GetDirectoryName(settings.NwPath)
                 : settings.NwDir;
 
-            // 修改 Play Action（必须用 ObservableCollection）
             game.GameActions = new ObservableCollection<GameAction>
     {
         new GameAction
@@ -107,15 +124,12 @@ namespace AutoInjectPlugin
         }
     };
 
-            // 修改启动后脚本（使用配置）
             game.GameStartedScript =
         $@"Start-Process ""{nwExe}"" `
-    -WorkingDirectory ""{nwDir}""";
+-WorkingDirectory ""{nwDir}""";
 
-            // 禁用全局脚本
             game.UseGlobalPostScript = false;
 
-            // 保存修改
             PlayniteApi.Database.Games.Update(game);
 
             PlayniteApi.Dialogs.ShowMessage("配置完成！");
