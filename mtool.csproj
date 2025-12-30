@@ -63,6 +63,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="AutoInjectPlugin.csproj" />
+    <None Include="extension.yaml" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
