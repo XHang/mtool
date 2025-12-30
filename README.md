@@ -19,6 +19,7 @@ start "" "E:\hgame\tool\MTool_A10U9\MTool\Tool\nw.exe" "E:\hgame\tool\MTool_A10U
 @echo "请不要修改该文件, 该文件由工具自动生成, 如果路径有问题, 你可以启动工具并将 'MTool_Game.exe' 拖动到工具中并点击 启动游戏 来重新自动生成正确的文件."
 @echo "如果你想要打包发布游戏, 并且希望用户不需要修改该文件, 请在共启动游戏时勾选 '复制工具到游戏' 并根据提示操作."
 ```
+wolfHook3.dll就不知道用在哪里了
 
 ## RGSS
 ```
@@ -27,3 +28,4 @@ cd /d "%~dp0"
 "E:\hgame\tool\MTool_A10U9\MTool_A10U17\Tool\loaders\inject.exe" "%~dp0\PrayGame.exe" "E:\hgame\tool\MTool_A10U9\MTool_A10U17\Tool\loaders\RGSSHook.dll"
 start "" "E:\hgame\tool\MTool_A10U9\MTool_A10U17\Tool\nw.exe" "E:\hgame\tool\MTool_A10U9\MTool_A10U17\Tool"
 ```
+默认是32，但我发现RGSSHook64.dll
