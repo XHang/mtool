@@ -91,15 +91,27 @@ namespace AutoInjectPlugin
                 string installDir = game.InstallDirectory;
 
                 string[] parts = installDir
-                    .TrimEnd(Path.DirectorySeparatorChar)
-                    .Split(Path.DirectorySeparatorChar);
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
                 if (parts.Length >= 2)
                 {
                     string last = parts[parts.Length - 1];
                     string secondLast = parts[parts.Length - 2];
 
+                    // 先按你的规则拼一遍
                     string newName = $"{secondLast}\\{last}";
+
+                    // 然后如果还包含 / 或 \，取最后一段作为真正的显示名
+                    if (newName.Contains('\\') || newName.Contains('/'))
+                    {
+                        var nameParts = newName
+                            .Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (nameParts.Length > 0)
+                        {
+                            newName = nameParts[nameParts.Length - 1];
+                        }
+                    }
 
                     game.Name = newName;
                 }
@@ -120,7 +132,8 @@ namespace AutoInjectPlugin
             Type = GameActionType.File,
             Path = injectExe,
             Arguments = $"\"{gameExe}\" \"{dllPath}\"",
-            WorkingDir = Path.GetDirectoryName(injectExe)
+            WorkingDir = Path.GetDirectoryName(injectExe),
+            IsPlayAction = true,
         }
     };
 
