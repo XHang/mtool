@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+
+	<PropertyGroup>
+		<!-- Playnite 插件必须使用 .NET Framework 4.7.2 -->
+		<TargetFramework>net472</TargetFramework>
+
+		<!-- 启用 WPF/XAML 支持（必须） -->
+		<UseWPF>true</UseWPF>
+
+		<AssemblyName>AutoInjectPlugin</AssemblyName>
+		<RootNamespace>AutoInjectPlugin</RootNamespace>
+		<OutputType>Library</OutputType>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- Playnite SDK 引用（你需要把路径改成你自己的） -->
+		<Reference Include="Playnite.SDK">
+			<HintPath>D:\Playnite\Playnite.SDK.dll</HintPath>
+		</Reference>
+
+		<!-- WPF 必需程序集 -->
+		<Reference Include="PresentationFramework" />
+		<Reference Include="PresentationCore" />
+		<Reference Include="WindowsBase" />
+		<Reference Include="System.Xaml" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- XAML 页面（必须有 Page 编译项） -->
+		<Page Include="AutoInjectSettingsView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- C# 源文件 -->
+		<Compile Include="AutoInjectPlugin.cs" />
+		<Compile Include="AutoInjectSettings.cs" />
+		<Compile Include="AutoInjectSettingsView.xaml.cs">
+			<DependentUpon>AutoInjectSettingsView.xaml</DependentUpon>
+		</Compile>
+	</ItemGroup>
+
+</Project>
