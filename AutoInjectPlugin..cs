@@ -6,23 +6,14 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using System.Windows;
 
 namespace AutoInjectPlugin
 {
     public class AutoInjectPlugin : GenericPlugin
     {
-
-
         public override Guid Id { get; } = Guid.Parse("7E9E6F34-2B1A-4C9F-9C2C-1C7E8D3A1234");
-
         private readonly AutoInjectSettingsViewModel settingss;
-
-        // 记录已经处理过的游戏
-        private readonly HashSet<Guid> processedGames = new HashSet<Guid>();
-
-        
 
         public AutoInjectPlugin(IPlayniteAPI api) : base(api)
         {
@@ -33,6 +24,10 @@ namespace AutoInjectPlugin
                 HasSettings = true
             };
         }
+
+        // ---------------------------
+        // 右键菜单入口
+        // ---------------------------
         public override IEnumerable<GameMenuItem> GetGameMenuItems(GetGameMenuItemsArgs args)
         {
             if (!args.Games.Any())
@@ -47,161 +42,180 @@ namespace AutoInjectPlugin
                 }
             };
         }
+
+        // ---------------------------
+        // 主流程（已极简）
+        // ---------------------------
         private void ConfigureGameForInject(Game game)
         {
-            var settings = settingss.Settings;
+            if (!ConfirmUserIntent(game))
+                return;
 
+            if (!ValidateGlobalSettings())
+                return;
+
+            string gameExe = ResolveGameExecutable(game);
+            if (string.IsNullOrEmpty(gameExe))
+                return;
+
+            AutoRenameGameIfNeeded(game, gameExe);
+
+            string dllPath = ResolveDllForGame(gameExe);
+            if (dllPath == null)
+                return;
+
+            ApplyInjectConfiguration(game, gameExe, dllPath);
+
+            PlayniteApi.Dialogs.ShowMessage("配置完成！");
+        }
+
+        // ============================================================
+        // 抽取的函数区域
+        // ============================================================
+
+        private bool ConfirmUserIntent(Game game)
+        {
             var result = PlayniteApi.Dialogs.ShowMessage(
-                $"你是否要把《{game.Name}》改为注入器启动？",
+                string.Format("你是否要把《{0}》改为注入器启动？", game.Name),
                 "注入器配置",
                 MessageBoxButton.YesNo
             );
 
-            if (result != MessageBoxResult.Yes)
-                return;
+            return result == MessageBoxResult.Yes;
+        }
 
-            // 先检查注入器和 nw.exe 是否配置
-            if (string.IsNullOrWhiteSpace(settings.InjectorPath) ||
-                string.IsNullOrWhiteSpace(settings.NwPath))
+        private bool ValidateGlobalSettings()
+        {
+            var s = settingss.Settings;
+
+            if (string.IsNullOrWhiteSpace(s.InjectorPath) ||
+                string.IsNullOrWhiteSpace(s.NwPath))
             {
                 PlayniteApi.Dialogs.ShowErrorMessage(
                     "请先配置注入路径（inject.exe、nw.exe）。",
                     "配置不完整"
                 );
-                return;
+                return false;
             }
 
-            var action = game.GameActions?.FirstOrDefault();
+            return true;
+        }
+
+        private string ResolveGameExecutable(Game game)
+        {
+            var action = game.GameActions != null ? game.GameActions.FirstOrDefault() : null;
             if (action == null)
             {
                 PlayniteApi.Dialogs.ShowErrorMessage(
                     "该游戏没有启动动作，无法配置。",
                     "注入器配置失败"
                 );
-                return;
+                return null;
             }
 
-            // 原始 Path（可能带 {InstallDir}）
-            string gameExe = action.Path;
+            string exe = action.Path;
 
-            // 如果包含 {InstallDir}，替换为实际 Installation Folder
             if (!string.IsNullOrWhiteSpace(game.InstallDirectory) &&
-                gameExe.Contains("{InstallDir}"))
+                exe.Contains("{InstallDir}"))
             {
-                var installDirTrimmed = game.InstallDirectory
-                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-                gameExe = gameExe.Replace("{InstallDir}", installDirTrimmed);
+                string realDir = game.InstallDirectory.TrimEnd('\\', '/');
+                exe = exe.Replace("{InstallDir}", realDir);
             }
 
+            return exe;
+        }
+
+        private void AutoRenameGameIfNeeded(Game game, string gameExe)
+        {
             string exeName = Path.GetFileName(gameExe);
+            if (!exeName.Equals("Game.exe", StringComparison.OrdinalIgnoreCase) &&
+                !exeName.Equals("nw.exe", StringComparison.OrdinalIgnoreCase))
+                return;
 
-            // ⭐ 自动改名逻辑（保持你原来的）
-            if (exeName.Equals("Game.exe", StringComparison.OrdinalIgnoreCase) ||
-                exeName.Equals("nw.exe", StringComparison.OrdinalIgnoreCase))
-            {
-                string installDir = game.InstallDirectory;
+            string installDir = game.InstallDirectory;
+            if (string.IsNullOrWhiteSpace(installDir))
+                return;
 
-                string[] parts = installDir
-                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                    .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string[] parts = installDir
+                .TrimEnd('\\', '/')
+                .Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
 
-                if (parts.Length >= 2)
-                {
-                    string last = parts[parts.Length - 1];
-                    string secondLast = parts[parts.Length - 2];
+            if (parts.Length < 2)
+                return;
 
-                    string newName = $"{secondLast}\\{last}";
+            string secondLast = parts[parts.Length - 2];
+            string last = parts[parts.Length - 1];
 
-                    if (newName.Contains('\\') || newName.Contains('/'))
-                    {
-                        var nameParts = newName
-                            .Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
-                        if (nameParts.Length > 0)
-                        {
-                            newName = nameParts[nameParts.Length - 1];
-                        }
-                    }
+            string newName = secondLast + "\\" + last;
 
-                    game.Name = newName;
-                }
-            }
+            string[] cleanParts = newName.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
+            if (cleanParts.Length > 0)
+                newName = cleanParts[cleanParts.Length - 1];
 
-            // ⭐ 用解析后的真正 EXE 路径判断位数
+            game.Name = newName;
+        }
+
+        private string ResolveDllForGame(string gameExe)
+        {
             bool is32 = IsGame32Bit(gameExe);
-
-            string dllPath;
+            var s = settingss.Settings;
 
             if (is32)
             {
-                if (string.IsNullOrWhiteSpace(settings.DllPath32))
+                if (string.IsNullOrWhiteSpace(s.DllPath32))
                 {
                     PlayniteApi.Dialogs.ShowErrorMessage(
                         "检测到该游戏为 32 位，但你没有配置 32 位 DLL 路径。",
                         "配置不完整"
                     );
-                    return;
+                    return null;
                 }
-
-                dllPath = settings.DllPath32;
+                return s.DllPath32;
             }
             else
             {
-                if (string.IsNullOrWhiteSpace(settings.DllPath))
+                if (string.IsNullOrWhiteSpace(s.DllPath))
                 {
                     PlayniteApi.Dialogs.ShowErrorMessage(
                         "检测到该游戏为 64 位，但你没有配置 64 位 DLL 路径。",
                         "配置不完整"
                     );
-                    return;
+                    return null;
                 }
-
-                dllPath = settings.DllPath;
+                return s.DllPath;
             }
-
-            string injectExe = settings.InjectorPath;
-            string nwExe = settings.NwPath;
-            string nwDir = string.IsNullOrWhiteSpace(settings.NwDir)
-                ? Path.GetDirectoryName(settings.NwPath)
-                : settings.NwDir;
-
-            // ⭐ 设置新的启动动作
-            game.GameActions = new ObservableCollection<GameAction>
-    {
-        new GameAction
-        {
-            Name = "Play (MTool Inject)",
-            Type = GameActionType.File,
-            Path = injectExe,
-            Arguments = $"\"{gameExe}\" \"{dllPath}\"",
-            WorkingDir = Path.GetDirectoryName(injectExe),
-            IsPlayAction = true,
         }
-    };
 
-            // ⭐ 设置 GameStartedScript
+        private void ApplyInjectConfiguration(Game game, string gameExe, string dllPath)
+        {
+            var s = settingss.Settings;
+
+            string injectExe = s.InjectorPath;
+            string nwExe = s.NwPath;
+            string nwDir = string.IsNullOrWhiteSpace(s.NwDir)
+                ? Path.GetDirectoryName(s.NwPath)
+                : s.NwDir;
+
+            game.GameActions = new ObservableCollection<GameAction>
+            {
+                new GameAction
+                {
+                    Name = "Play (MTool Inject)",
+                    Type = GameActionType.File,
+                    Path = injectExe,
+                    Arguments = "\"" + gameExe + "\" \"" + dllPath + "\"",
+                    WorkingDir = Path.GetDirectoryName(injectExe),
+                    IsPlayAction = true
+                }
+            };
+
             game.GameStartedScript =
-        $@"Start-Process ""{nwExe}"" `
--WorkingDirectory ""{nwDir}""";
+                "Start-Process \"" + nwExe + "\" `" + Environment.NewLine +
+                "-WorkingDirectory \"" + nwDir + "\"";
 
             game.UseGlobalPostScript = false;
-
+            game.UseGlobalGameStartedScript = false;
             PlayniteApi.Database.Games.Update(game);
-
-            PlayniteApi.Dialogs.ShowMessage("配置完成！");
-        }
-
-
-
-
-        public override ISettings GetSettings(bool firstRunSettings)
-        {
-            return settingss;
-        }
-
-        public override System.Windows.Controls.UserControl GetSettingsView(bool firstRunSettings)
-        {
-            return new AutoInjectSettingsView();
         }
 
         private bool IsGame32Bit(string exePath)
@@ -217,17 +231,23 @@ namespace AutoInjectPlugin
                     stream.Seek(peOffset + 4, SeekOrigin.Begin);
                     ushort machine = reader.ReadUInt16();
 
-                    // 0x014C = 32-bit
-                    // 0x8664 = 64-bit
-                    return machine == 0x014C;
+                    return machine == 0x014C; // 32-bit
                 }
             }
             catch
             {
-                // 读取失败默认按 64 位处理
-                return false;
+                return false; // 默认按 64 位
             }
         }
 
+        public override ISettings GetSettings(bool firstRunSettings)
+        {
+            return settingss;
+        }
+
+        public override System.Windows.Controls.UserControl GetSettingsView(bool firstRunSettings)
+        {
+            return new AutoInjectSettingsView();
+        }
     }
 }

@@ -32,8 +32,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Playnite.SDK, Version=6.14.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\Downloads\Video\playnitesdk.6.14.0\lib\net462\Playnite.SDK.dll</HintPath>
+      <HintPath>packages\PlayniteSDK.6.14.0\lib\net462\Playnite.SDK.dll</HintPath>
     </Reference>
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
@@ -64,6 +63,7 @@
   <ItemGroup>
     <None Include="AutoInjectPlugin.csproj" />
     <None Include="extension.yaml" />
+    <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
