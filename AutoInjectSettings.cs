@@ -16,6 +16,18 @@ namespace AutoInjectPlugin
         private string dllPath32 = "";
         public string DllPath32 { get => dllPath32; set => SetValue(ref dllPath32, value); }
 
+        private string wolfDDL = "";
+        public string WolfDDL { get => wolfDDL; set => SetValue(ref wolfDDL, value); }
+
+        private string wolfDDL3 = "";
+        public string WolfDDL3 { get => wolfDDL3; set => SetValue(ref wolfDDL3, value); }
+
+
+        private string rgssDDL = "";
+        public string RGSSDDL { get => rgssDDL; set => SetValue(ref rgssDDL, value); }
+
+        private string rgssDDL64 = "";
+        public string RGSSDDL64 { get => rgssDDL64; set => SetValue(ref rgssDDL64, value); }
 
         private string nwPath = "";
         public string NwPath { get => nwPath; set => SetValue(ref nwPath, value); }

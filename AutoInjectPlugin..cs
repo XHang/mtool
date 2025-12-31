@@ -1,4 +1,4 @@
-﻿using Playnite.SDK;
+using Playnite.SDK;
 using Playnite.SDK.Models;
 using Playnite.SDK.Plugins;
 using System;
@@ -160,6 +160,72 @@ namespace AutoInjectPlugin
             bool is32 = IsGame32Bit(gameExe);
             var s = settingss.Settings;
 
+            //
+            // 1. Wolf 引擎
+            //
+            if (IsWolfGame(gameExe))
+            {
+                if (string.IsNullOrWhiteSpace(s.WolfDDL))
+                {
+                    PlayniteApi.Dialogs.ShowErrorMessage(
+                        "检测到该游戏为 Wolf 引擎，但你没有配置 Wolf DLL 路径。",
+                        "配置不完整"
+                    );
+                    return null;
+                }
+                return s.WolfDDL;
+            }
+
+            //
+            // 2. Wolf3 引擎
+            //
+            if (IsWolf3Game(gameExe))
+            {
+                if (string.IsNullOrWhiteSpace(s.WolfDDL3))
+                {
+                    PlayniteApi.Dialogs.ShowErrorMessage(
+                        "检测到该游戏为 Wolf3 引擎，但你没有配置 Wolf3 DLL 路径。",
+                        "配置不完整"
+                    );
+                    return null;
+                }
+                return s.WolfDDL3;
+            }
+
+            //
+            // 3. RGSS 引擎
+            //
+            if (IsRgssGame(gameExe))
+            {
+                if (is32)
+                {
+                    if (string.IsNullOrWhiteSpace(s.RGSSDDL))
+                    {
+                        PlayniteApi.Dialogs.ShowErrorMessage(
+                            "检测到该游戏为 RGSS 32 位，但你没有配置 RGSS 32 位 DLL 路径。",
+                            "配置不完整"
+                        );
+                        return null;
+                    }
+                    return s.RGSSDDL;
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(s.RGSSDDL64))
+                    {
+                        PlayniteApi.Dialogs.ShowErrorMessage(
+                            "检测到该游戏为 RGSS 64 位，但你没有配置 RGSS 64 位 DLL 路径。",
+                            "配置不完整"
+                        );
+                        return null;
+                    }
+                    return s.RGSSDDL64;
+                }
+            }
+
+            //
+            // 4. 默认逻辑（原来的逻辑）
+            //
             if (is32)
             {
                 if (string.IsNullOrWhiteSpace(s.DllPath32))
@@ -185,6 +251,40 @@ namespace AutoInjectPlugin
                 return s.DllPath;
             }
         }
+
+        private bool IsWolfGame(string gameExe)
+        {
+            var dir = Path.GetDirectoryName(gameExe);
+            if (dir == null) return false;
+
+            return Directory.EnumerateFiles(dir, "*.wolf", SearchOption.TopDirectoryOnly)
+                            .Any(f => !f.ToUpper().EndsWith(".WOLF3"));
+        }
+
+
+        private bool IsWolf3Game(string gameExe)
+        {
+            var dir = Path.GetDirectoryName(gameExe);
+            if (dir == null) return false;
+
+            return Directory.EnumerateFiles(dir, "*.wolf3", SearchOption.TopDirectoryOnly)
+                            .Any();
+        }
+
+
+        private bool IsRgssGame(string gameExe)
+        {
+            var dir = Path.GetDirectoryName(gameExe);
+            if (dir == null) return false;
+
+            return Directory.EnumerateFiles(dir, "*.dll", SearchOption.TopDirectoryOnly)
+                            .Any(f => Path.GetFileName(f).ToUpper().Contains("RGSS"));
+        }
+
+
+
+
+
 
         private void ApplyInjectConfiguration(Game game, string gameExe, string dllPath)
         {
