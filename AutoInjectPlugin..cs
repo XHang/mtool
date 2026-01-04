@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Windows;
 
 namespace AutoInjectPlugin
@@ -254,22 +255,87 @@ namespace AutoInjectPlugin
 
         private bool IsWolfGame(string gameExe)
         {
-            var dir = Path.GetDirectoryName(gameExe);
-            if (dir == null) return false;
+            const int maxReadBytes = 4 * 1024 * 1024; // 读取前 4MB
 
-            return Directory.EnumerateFiles(dir, "*.wolf", SearchOption.TopDirectoryOnly)
-                            .Any(f => !f.ToUpper().EndsWith(".WOLF3"));
+            try
+            {
+                using (var fs = new FileStream(gameExe, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                {
+                    int length = (int)Math.Min(fs.Length, maxReadBytes);
+                    byte[] buffer = new byte[length];
+
+                    fs.Read(buffer, 0, length);
+
+                    string content = Encoding.ASCII.GetString(buffer);
+
+                    // Wolf RPG Editor 的典型特征字符串（适用于 Wolf2 / Wolf3）
+                    string[] markers =
+                    {
+                "Wolf RPG Editor",
+                "WolfRPG",
+                "BasicData.wolf",
+                "MapData",
+                "WolfTrans"
+            };
+
+                    foreach (var m in markers)
+                    {
+                        if (content.IndexOf(m, StringComparison.OrdinalIgnoreCase) >= 0)
+                            return true;
+                    }
+
+                    return false;
+                }
+            }
+            catch
+            {
+                return false;
+            }
         }
+
 
 
         private bool IsWolf3Game(string gameExe)
         {
-            var dir = Path.GetDirectoryName(gameExe);
-            if (dir == null) return false;
+            const int maxReadBytes = 4 * 1024 * 1024; // 读取前 4MB
 
-            return Directory.EnumerateFiles(dir, "*.wolf3", SearchOption.TopDirectoryOnly)
-                            .Any();
+            try
+            {
+                using (var fs = new FileStream(gameExe, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                {
+                    int length = (int)Math.Min(fs.Length, maxReadBytes);
+                    byte[] buffer = new byte[length];
+
+                    fs.Read(buffer, 0, length);
+
+                    string content = Encoding.ASCII.GetString(buffer);
+
+                    // Wolf RPG Editor 3 的典型特征字符串
+                    string[] markers =
+                    {
+                "Wolf RPG Editor",
+                "WolfRPG",
+                "BasicData.wolf",
+                "MapData",
+                "WolfTrans"
+            };
+
+                    foreach (var m in markers)
+                    {
+                        if (content.IndexOf(m, StringComparison.OrdinalIgnoreCase) >= 0)
+                            return true;
+                    }
+
+                    return false;
+                }
+            }
+            catch
+            {
+                return false;
+            }
         }
+
+
 
 
         private bool IsRgssGame(string gameExe)
