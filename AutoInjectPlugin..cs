@@ -77,7 +77,7 @@ namespace AutoInjectPlugin
         private bool ConfirmUserIntent(Game game)
         {
             var result = PlayniteApi.Dialogs.ShowMessage(
-                string.Format("你是否要把《{0}》改为注入器启动？", game.Name),
+                string.Format("Do you want to inject the game《{0}》? note:wolf exe must be MTool_Game.exe!", game.Name),
                 "注入器配置",
                 MessageBoxButton.YesNo
             );
@@ -130,7 +130,8 @@ namespace AutoInjectPlugin
         {
             string exeName = Path.GetFileName(gameExe);
             if (!exeName.Equals("Game.exe", StringComparison.OrdinalIgnoreCase) &&
-                !exeName.Equals("nw.exe", StringComparison.OrdinalIgnoreCase))
+                !exeName.Equals("nw.exe", StringComparison.OrdinalIgnoreCase)  &&
+                !exeName.Equals("MTool_Game.exe", StringComparison.OrdinalIgnoreCase))
                 return;
 
             string installDir = game.InstallDirectory;
@@ -158,183 +159,104 @@ namespace AutoInjectPlugin
 
         private string ResolveDllForGame(string gameExe)
         {
-            bool is32 = IsGame32Bit(gameExe);
+            var dir = Path.GetDirectoryName(gameExe);
             var s = settingss.Settings;
 
-            //
-            // 1. Wolf 引擎
-            //
-            if (IsWolfGame(gameExe))
+            bool is32 = IsGame32Bit(gameExe);
+            bool isWolf = IsWolfGame(gameExe);
+            bool isWolf3 = IsWolf3Game(gameExe);
+            bool isRgss = IsRgssGame(gameExe);
+
+            // -------------------------------
+            // 0. 路径中文检查
+            // -------------------------------
+            bool pathHasChinese = dir.Any(c => c > 127);
+
+            if (pathHasChinese && (isWolf || isWolf3 || isRgss))
             {
-                if (string.IsNullOrWhiteSpace(s.WolfDDL))
-                {
-                    PlayniteApi.Dialogs.ShowErrorMessage(
-                        "检测到该游戏为 Wolf 引擎，但你没有配置 Wolf DLL 路径。",
-                        "配置不完整"
-                    );
-                    return null;
-                }
-                return s.WolfDDL;
+                PlayniteApi.Dialogs.ShowErrorMessage(
+                    "检测到该游戏路径包含中文字符。\n\nWolf / Wolf3 / RGSS 引擎不支持中文路径，请将游戏移动到纯英文路径。",
+                    "路径错误"
+                );
+                return null;
             }
 
-            //
-            // 2. Wolf3 引擎
-            //
-            if (IsWolf3Game(gameExe))
+            // -------------------------------
+            // 1. 根据引擎类型选择 DLL
+            // -------------------------------
+            if (isWolf)
+                return RequireDll(s.WolfDDL, "Wolf 引擎", "Wolf DLL 路径");
+
+            if (isWolf3)
+                return RequireDll(s.WolfDDL3, "Wolf3 引擎", "Wolf3 DLL 路径");
+
+            if (isRgss)
             {
-                if (string.IsNullOrWhiteSpace(s.WolfDDL3))
-                {
-                    PlayniteApi.Dialogs.ShowErrorMessage(
-                        "检测到该游戏为 Wolf3 引擎，但你没有配置 Wolf3 DLL 路径。",
-                        "配置不完整"
-                    );
-                    return null;
-                }
-                return s.WolfDDL3;
+                return is32
+                    ? RequireDll(s.RGSSDDL, "RGSS 32 位", "RGSS 32 位 DLL 路径")
+                    : RequireDll(s.RGSSDDL64, "RGSS 64 位", "RGSS 64 位 DLL 路径");
             }
 
-            //
-            // 3. RGSS 引擎
-            //
-            if (IsRgssGame(gameExe))
-            {
-                if (is32)
-                {
-                    if (string.IsNullOrWhiteSpace(s.RGSSDDL))
-                    {
-                        PlayniteApi.Dialogs.ShowErrorMessage(
-                            "检测到该游戏为 RGSS 32 位，但你没有配置 RGSS 32 位 DLL 路径。",
-                            "配置不完整"
-                        );
-                        return null;
-                    }
-                    return s.RGSSDDL;
-                }
-                else
-                {
-                    if (string.IsNullOrWhiteSpace(s.RGSSDDL64))
-                    {
-                        PlayniteApi.Dialogs.ShowErrorMessage(
-                            "检测到该游戏为 RGSS 64 位，但你没有配置 RGSS 64 位 DLL 路径。",
-                            "配置不完整"
-                        );
-                        return null;
-                    }
-                    return s.RGSSDDL64;
-                }
-            }
-
-            //
-            // 4. 默认逻辑（原来的逻辑）
-            //
-            if (is32)
-            {
-                if (string.IsNullOrWhiteSpace(s.DllPath32))
-                {
-                    PlayniteApi.Dialogs.ShowErrorMessage(
-                        "检测到该游戏为 32 位，但你没有配置 32 位 DLL 路径。",
-                        "配置不完整"
-                    );
-                    return null;
-                }
-                return s.DllPath32;
-            }
-            else
-            {
-                if (string.IsNullOrWhiteSpace(s.DllPath))
-                {
-                    PlayniteApi.Dialogs.ShowErrorMessage(
-                        "检测到该游戏为 64 位，但你没有配置 64 位 DLL 路径。",
-                        "配置不完整"
-                    );
-                    return null;
-                }
-                return s.DllPath;
-            }
+            // -------------------------------
+            // 2. 默认逻辑
+            // -------------------------------
+            return is32
+                ? RequireDll(s.DllPath32, "32 位游戏", "32 位 DLL 路径")
+                : RequireDll(s.DllPath, "64 位游戏", "64 位 DLL 路径");
         }
+
+        private string RequireDll(string dllPath, string engineName, string configName)
+        {
+            if (string.IsNullOrWhiteSpace(dllPath))
+            {
+                PlayniteApi.Dialogs.ShowErrorMessage(
+                    $"检测到该游戏为 {engineName}，但你没有配置 {configName}。",
+                    "配置不完整"
+                );
+                return null;
+            }
+            return dllPath;
+        }
+
+
 
         private bool IsWolfGame(string gameExe)
         {
-            const int maxReadBytes = 4 * 1024 * 1024; // 读取前 4MB
-
-            try
-            {
-                using (var fs = new FileStream(gameExe, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                {
-                    int length = (int)Math.Min(fs.Length, maxReadBytes);
-                    byte[] buffer = new byte[length];
-
-                    fs.Read(buffer, 0, length);
-
-                    string content = Encoding.ASCII.GetString(buffer);
-
-                    // Wolf RPG Editor 的典型特征字符串（适用于 Wolf2 / Wolf3）
-                    string[] markers =
-                    {
-                "Wolf RPG Editor",
-                "WolfRPG",
-                "BasicData.wolf",
-                "MapData",
-                "WolfTrans"
-            };
-
-                    foreach (var m in markers)
-                    {
-                        if (content.IndexOf(m, StringComparison.OrdinalIgnoreCase) >= 0)
-                            return true;
-                    }
-
-                    return false;
-                }
-            }
-            catch
-            {
+            var dir = Path.GetDirectoryName(gameExe);
+            if (dir == null)
                 return false;
-            }
+
+            // Wolf 游戏发布版的核心特征（Wolf2 / Wolf3 通用）
+            bool hasGameIni = File.Exists(Path.Combine(dir, "Game.ini"));
+            bool hasScriptVdf = File.Exists(Path.Combine(dir, "Script.vdf"));
+            bool hasAppendDb = File.Exists(Path.Combine(dir, "Append.db"));
+            bool hasDataDir = Directory.Exists(Path.Combine(dir, "Data"));
+            bool wolfVersionFixTo = Directory.Exists(Path.Combine(dir, "wolfVersionFixTo"));
+
+            // Wolf 游戏至少满足：Game.ini + Data + (Script.vdf 或 Append.db)
+            if (hasGameIni && hasDataDir && (hasScriptVdf || hasAppendDb || wolfVersionFixTo))
+                return true;
+
+            return false;
         }
+
+
+
+
 
 
 
         private bool IsWolf3Game(string gameExe)
         {
-            const int maxReadBytes = 4 * 1024 * 1024; // 读取前 4MB
-
-            try
-            {
-                using (var fs = new FileStream(gameExe, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                {
-                    int length = (int)Math.Min(fs.Length, maxReadBytes);
-                    byte[] buffer = new byte[length];
-
-                    fs.Read(buffer, 0, length);
-
-                    string content = Encoding.ASCII.GetString(buffer);
-
-                    // Wolf RPG Editor 3 的典型特征字符串
-                    string[] markers =
-                    {
-                "Wolf RPG Editor",
-                "WolfRPG",
-                "BasicData.wolf",
-                "MapData",
-                "WolfTrans"
-            };
-
-                    foreach (var m in markers)
-                    {
-                        if (content.IndexOf(m, StringComparison.OrdinalIgnoreCase) >= 0)
-                            return true;
-                    }
-
-                    return false;
-                }
-            }
-            catch
-            {
+            var dir = Path.GetDirectoryName(gameExe);
+            if (dir == null)
                 return false;
-            }
+
+            // Wolf3 的可确认特征
+            return File.Exists(Path.Combine(dir, "wolfDataLock.json"));
         }
 
+        
 
 
 
@@ -343,9 +265,19 @@ namespace AutoInjectPlugin
             var dir = Path.GetDirectoryName(gameExe);
             if (dir == null) return false;
 
-            return Directory.EnumerateFiles(dir, "*.dll", SearchOption.TopDirectoryOnly)
-                            .Any(f => Path.GetFileName(f).ToUpper().Contains("RGSS"));
+            // 加密包
+            string[] archives = { "Game.rgssad", "Game.rgss2a", "Game.rgss3a" };
+            if (archives.Any(a => File.Exists(Path.Combine(dir, a))))
+                return true;
+
+            // 不加密 DLL
+            string[] dlls = { "RGSS100J.dll", "RGSS202E.dll", "RGSS301.dll" };
+            if (dlls.Any(d => File.Exists(Path.Combine(dir, d))))
+                return true;
+
+            return false;
         }
+
 
 
 
