@@ -34,6 +34,9 @@ namespace AutoInjectPlugin
 
         private string nwDir = "";
         public string NwDir { get => nwDir; set => SetValue(ref nwDir, value); }
+
+        private string tempFolder = "";
+        public string TempFolder { get => tempFolder; set => SetValue(ref tempFolder, value); }
     }
 
     public class AutoInjectSettingsViewModel : ObservableObject, ISettings

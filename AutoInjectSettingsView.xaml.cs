@@ -12,44 +12,67 @@ namespace AutoInjectPlugin
         }
         private void Browse_Click(object sender, RoutedEventArgs e)
         {
-            var dialog = new OpenFileDialog
+            var vm = DataContext as AutoInjectSettingsViewModel;
+            string field = (sender as Button).Tag as string;
+
+            // -------------------------------
+            // 1. 判断是否是文件夹字段
+            // -------------------------------
+            bool isFolderField = field == "NwDir" || field == "TempFolder";
+
+            if (isFolderField)
             {
-                Filter = "DLL 文件 (*.dll)|*.dll|所有文件 (*.*)|*.*"
-            };
+                // 选择文件夹
+                var dialog = new System.Windows.Forms.FolderBrowserDialog();
 
-            if (dialog.ShowDialog() == true)
+                if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                {
+                    string path = dialog.SelectedPath;
+
+                    if (field == "NwDir")
+                        vm.Settings.NwDir = path;
+
+                    if (field == "TempFolder")
+                        vm.Settings.TempFolder = path;
+                }
+
+                return;
+            }
+
+            // -------------------------------
+            // 2. 选择文件字段（exe 或 dll）
+            // -------------------------------
+            var fileDialog = new OpenFileDialog();
+
+            // exe 字段
+            if (field == "InjectorPath" || field == "NwPath")
             {
-                var vm = DataContext as AutoInjectSettingsViewModel;
-                string field = (sender as Button).Tag as string;
+                fileDialog.Filter = "可执行文件 (*.exe)|*.exe|所有文件 (*.*)|*.*";
+            }
+            else
+            {
+                // 其他字段默认是 DLL
+                fileDialog.Filter = "DLL 文件 (*.dll)|*.dll|所有文件 (*.*)|*.*";
+            }
 
-                if (field == "InjectorPath")
-                    vm.Settings.InjectorPath = dialog.FileName;
+            if (fileDialog.ShowDialog() == true)
+            {
+                string file = fileDialog.FileName;
 
-                if (field == "DllPath")
-                    vm.Settings.DllPath = dialog.FileName;
-
-                if (field == "DllPath32")
-                    vm.Settings.DllPath32 = dialog.FileName;
-
-                if (field == "WolfDDL")
-                    vm.Settings.WolfDDL = dialog.FileName;
-
-                if (field == "WolfDDL3")
-                    vm.Settings.WolfDDL3 = dialog.FileName;
-
-                if (field == "RGSSDDL")
-                    vm.Settings.RGSSDDL = dialog.FileName;
-
-                if (field == "RGSSDDL64")
-                    vm.Settings.RGSSDDL64 = dialog.FileName;
-
-                if (field == "NwPath")
-                    vm.Settings.NwPath = dialog.FileName;
-
-                if (field == "NwDir")
-                    vm.Settings.NwDir = dialog.FileName;
+                switch (field)
+                {
+                    case "InjectorPath": vm.Settings.InjectorPath = file; break;
+                    case "DllPath": vm.Settings.DllPath = file; break;
+                    case "DllPath32": vm.Settings.DllPath32 = file; break;
+                    case "WolfDDL": vm.Settings.WolfDDL = file; break;
+                    case "WolfDDL3": vm.Settings.WolfDDL3 = file; break;
+                    case "RGSSDDL": vm.Settings.RGSSDDL = file; break;
+                    case "RGSSDDL64": vm.Settings.RGSSDDL64 = file; break;
+                    case "NwPath": vm.Settings.NwPath = file; break;
+                }
             }
         }
+
     }
 
 }

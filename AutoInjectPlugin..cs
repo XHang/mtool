@@ -4,6 +4,7 @@ using Playnite.SDK.Plugins;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -16,6 +17,7 @@ namespace AutoInjectPlugin
         public override Guid Id { get; } = Guid.Parse("7E9E6F34-2B1A-4C9F-9C2C-1C7E8D3A1234");
         private readonly AutoInjectSettingsViewModel settingss;
 
+
         public AutoInjectPlugin(IPlayniteAPI api) : base(api)
         {
             settingss = new AutoInjectSettingsViewModel(this);
@@ -26,9 +28,6 @@ namespace AutoInjectPlugin
             };
         }
 
-        // ---------------------------
-        // 右键菜单入口
-        // ---------------------------
         public override IEnumerable<GameMenuItem> GetGameMenuItems(GetGameMenuItemsArgs args)
         {
             if (!args.Games.Any())
@@ -44,11 +43,9 @@ namespace AutoInjectPlugin
             };
         }
 
-        // ---------------------------
-        // 主流程（已极简）
-        // ---------------------------
         private void ConfigureGameForInject(Game game)
         {
+
             if (!ConfirmUserIntent(game))
                 return;
 
@@ -60,6 +57,11 @@ namespace AutoInjectPlugin
                 return;
 
             AutoRenameGameIfNeeded(game, gameExe);
+
+            // -------------------------------
+            // 新逻辑：中文路径 + Wolf/RGSS → 创建软链接
+            // -------------------------------
+            gameExe = HandleChinesePathIfNeeded(gameExe);
 
             string dllPath = ResolveDllForGame(gameExe);
             if (dllPath == null)
@@ -77,7 +79,7 @@ namespace AutoInjectPlugin
         private bool ConfirmUserIntent(Game game)
         {
             var result = PlayniteApi.Dialogs.ShowMessage(
-                string.Format("Do you want to inject the game《{0}》? note:wolf exe must be MTool_Game.exe!", game.Name),
+                $"Inject ? note:The exe file must be MTool_Game.exe if made from Wolf Engine!",
                 "注入器配置",
                 MessageBoxButton.YesNo
             );
@@ -104,7 +106,7 @@ namespace AutoInjectPlugin
 
         private string ResolveGameExecutable(Game game)
         {
-            var action = game.GameActions != null ? game.GameActions.FirstOrDefault() : null;
+            var action = game.GameActions?.FirstOrDefault();
             if (action == null)
             {
                 PlayniteApi.Dialogs.ShowErrorMessage(
@@ -130,7 +132,7 @@ namespace AutoInjectPlugin
         {
             string exeName = Path.GetFileName(gameExe);
             if (!exeName.Equals("Game.exe", StringComparison.OrdinalIgnoreCase) &&
-                !exeName.Equals("nw.exe", StringComparison.OrdinalIgnoreCase)  &&
+                !exeName.Equals("nw.exe", StringComparison.OrdinalIgnoreCase) &&
                 !exeName.Equals("MTool_Game.exe", StringComparison.OrdinalIgnoreCase))
                 return;
 
@@ -145,45 +147,69 @@ namespace AutoInjectPlugin
             if (parts.Length < 2)
                 return;
 
-            string secondLast = parts[parts.Length - 2];
-            string last = parts[parts.Length - 1];
-
-            string newName = secondLast + "\\" + last;
-
-            string[] cleanParts = newName.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
-            if (cleanParts.Length > 0)
-                newName = cleanParts[cleanParts.Length - 1];
-
+            string newName = parts.Last();
             game.Name = newName;
         }
 
+        // ============================================================
+        // 新增：中文路径处理 + 创建软链接
+        // ============================================================
+        private string HandleChinesePathIfNeeded(string gameExe)
+        {
+            string dir = Path.GetDirectoryName(gameExe);
+            bool hasChinese = dir.Any(c => c > 127);
+
+            bool isWolf = IsWolfGame(gameExe);
+            bool isRgss = IsRgssGame(gameExe);
+
+            if (!hasChinese || !(isWolf || isRgss))
+                return gameExe;
+
+            // 创建 reference 根目录
+            Directory.CreateDirectory(settingss.Settings.TempFolder);
+
+            // 生成 UUID（仅字母）
+            string uuid = new string(Guid.NewGuid()
+                .ToString("N")
+                .Where(char.IsLetter)
+                .ToArray());
+
+            string linkPath = Path.Combine(settingss.Settings.TempFolder, uuid);
+
+            // 创建软链接（junction）
+            CreateJunction(linkPath, dir);
+
+            // 返回软链接中的 exe 路径
+            return Path.Combine(linkPath, Path.GetFileName(gameExe));
+        }
+
+        private void CreateJunction(string link, string target)
+        {
+            if (Directory.Exists(link))
+                Directory.Delete(link);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(link));
+
+            var psi = new ProcessStartInfo("cmd.exe",
+                $"/c mklink /J \"{link}\" \"{target}\"")
+            {
+                CreateNoWindow = true,
+                UseShellExecute = false
+            };
+
+            Process.Start(psi)?.WaitForExit();
+        }
+
+        // ============================================================
+
         private string ResolveDllForGame(string gameExe)
         {
-            var dir = Path.GetDirectoryName(gameExe);
             var s = settingss.Settings;
-
             bool is32 = IsGame32Bit(gameExe);
             bool isWolf = IsWolfGame(gameExe);
             bool isWolf3 = IsWolf3Game(gameExe);
             bool isRgss = IsRgssGame(gameExe);
 
-            // -------------------------------
-            // 0. 路径中文检查
-            // -------------------------------
-            bool pathHasChinese = dir.Any(c => c > 127);
-
-            if (pathHasChinese && (isWolf || isWolf3 || isRgss))
-            {
-                PlayniteApi.Dialogs.ShowErrorMessage(
-                    "检测到该游戏路径包含中文字符。\n\nWolf / Wolf3 / RGSS 引擎不支持中文路径，请将游戏移动到纯英文路径。",
-                    "路径错误"
-                );
-                return null;
-            }
-
-            // -------------------------------
-            // 1. 根据引擎类型选择 DLL
-            // -------------------------------
             if (isWolf)
                 return RequireDll(s.WolfDDL, "Wolf 引擎", "Wolf DLL 路径");
 
@@ -191,15 +217,10 @@ namespace AutoInjectPlugin
                 return RequireDll(s.WolfDDL3, "Wolf3 引擎", "Wolf3 DLL 路径");
 
             if (isRgss)
-            {
                 return is32
                     ? RequireDll(s.RGSSDDL, "RGSS 32 位", "RGSS 32 位 DLL 路径")
                     : RequireDll(s.RGSSDDL64, "RGSS 64 位", "RGSS 64 位 DLL 路径");
-            }
 
-            // -------------------------------
-            // 2. 默认逻辑
-            // -------------------------------
             return is32
                 ? RequireDll(s.DllPath32, "32 位游戏", "32 位 DLL 路径")
                 : RequireDll(s.DllPath, "64 位游戏", "64 位 DLL 路径");
@@ -218,71 +239,41 @@ namespace AutoInjectPlugin
             return dllPath;
         }
 
-
-
         private bool IsWolfGame(string gameExe)
         {
             var dir = Path.GetDirectoryName(gameExe);
             if (dir == null)
                 return false;
 
-            // Wolf 游戏发布版的核心特征（Wolf2 / Wolf3 通用）
             bool hasGameIni = File.Exists(Path.Combine(dir, "Game.ini"));
             bool hasScriptVdf = File.Exists(Path.Combine(dir, "Script.vdf"));
             bool hasAppendDb = File.Exists(Path.Combine(dir, "Append.db"));
             bool hasDataDir = Directory.Exists(Path.Combine(dir, "Data"));
-            bool wolfVersionFixTo = Directory.Exists(Path.Combine(dir, "wolfVersionFixTo"));
 
-            // Wolf 游戏至少满足：Game.ini + Data + (Script.vdf 或 Append.db)
-            if (hasGameIni && hasDataDir && (hasScriptVdf || hasAppendDb || wolfVersionFixTo))
-                return true;
-
-            return false;
+            return hasGameIni && hasDataDir && (hasScriptVdf || hasAppendDb);
         }
-
-
-
-
-
-
 
         private bool IsWolf3Game(string gameExe)
         {
             var dir = Path.GetDirectoryName(gameExe);
-            if (dir == null)
-                return false;
-
-            // Wolf3 的可确认特征
             return File.Exists(Path.Combine(dir, "wolfDataLock.json"));
         }
-
-        
-
-
 
         private bool IsRgssGame(string gameExe)
         {
             var dir = Path.GetDirectoryName(gameExe);
             if (dir == null) return false;
 
-            // 加密包
             string[] archives = { "Game.rgssad", "Game.rgss2a", "Game.rgss3a" };
             if (archives.Any(a => File.Exists(Path.Combine(dir, a))))
                 return true;
 
-            // 不加密 DLL
             string[] dlls = { "RGSS100J.dll", "RGSS202E.dll", "RGSS301.dll" };
             if (dlls.Any(d => File.Exists(Path.Combine(dir, d))))
                 return true;
 
             return false;
         }
-
-
-
-
-
-
 
         private void ApplyInjectConfiguration(Game game, string gameExe, string dllPath)
         {
@@ -301,15 +292,14 @@ namespace AutoInjectPlugin
                     Name = "Play (MTool Inject)",
                     Type = GameActionType.File,
                     Path = injectExe,
-                    Arguments = "\"" + gameExe + "\" \"" + dllPath + "\"",
+                    Arguments = $"\"{gameExe}\" \"{dllPath}\"",
                     WorkingDir = Path.GetDirectoryName(injectExe),
                     IsPlayAction = true
                 }
             };
 
             game.GameStartedScript =
-                "Start-Process \"" + nwExe + "\" `" + Environment.NewLine +
-                "-WorkingDirectory \"" + nwDir + "\"";
+                $"Start-Process \"{nwExe}\" `\n-WorkingDirectory \"{nwDir}\"";
 
             game.UseGlobalPostScript = false;
             game.UseGlobalGameStartedScript = false;
@@ -329,23 +319,17 @@ namespace AutoInjectPlugin
                     stream.Seek(peOffset + 4, SeekOrigin.Begin);
                     ushort machine = reader.ReadUInt16();
 
-                    return machine == 0x014C; // 32-bit
+                    return machine == 0x014C;
                 }
             }
             catch
             {
-                return false; // 默认按 64 位
+                return false;
             }
         }
 
-        public override ISettings GetSettings(bool firstRunSettings)
-        {
-            return settingss;
-        }
-
+        public override ISettings GetSettings(bool firstRunSettings) => settingss;
         public override System.Windows.Controls.UserControl GetSettingsView(bool firstRunSettings)
-        {
-            return new AutoInjectSettingsView();
-        }
+            => new AutoInjectSettingsView();
     }
 }
