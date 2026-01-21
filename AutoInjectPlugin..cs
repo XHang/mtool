@@ -160,9 +160,10 @@ namespace AutoInjectPlugin
             bool hasChinese = dir.Any(c => c > 127);
 
             bool isWolf = IsWolfGame(gameExe);
+            bool isWolf3 = IsWolf3Game(gameExe);
             bool isRgss = IsRgssGame(gameExe);
 
-            if (!hasChinese || !(isWolf || isRgss))
+            if (!hasChinese || !(isWolf || isRgss || isWolf3))
                 return gameExe;
 
             // 创建 reference 根目录
@@ -248,16 +249,39 @@ namespace AutoInjectPlugin
             bool hasGameIni = File.Exists(Path.Combine(dir, "Game.ini"));
             bool hasScriptVdf = File.Exists(Path.Combine(dir, "Script.vdf"));
             bool hasAppendDb = File.Exists(Path.Combine(dir, "Append.db"));
-            bool hasDataDir = Directory.Exists(Path.Combine(dir, "Data"));
+            bool wolfDataLock = File.Exists(Path.Combine(dir, "wolfDataLock.json"));
+         
 
-            return hasGameIni && hasDataDir && (hasScriptVdf || hasAppendDb);
+            return hasGameIni  && (hasScriptVdf || hasAppendDb || wolfDataLock);
         }
 
         private bool IsWolf3Game(string gameExe)
         {
-            var dir = Path.GetDirectoryName(gameExe);
-            return File.Exists(Path.Combine(dir, "wolfDataLock.json"));
+            // 1. 必须先是 Wolf 引擎，否则不可能是 Wolf3
+            if (!IsWolfGame(gameExe))
+                return false;
+
+            try
+            {
+                var info = FileVersionInfo.GetVersionInfo(gameExe);
+
+                // 可能是 "3.11.123.456" 或 "3.21" 或 "3.0"
+                string version = info.FileVersion;
+
+                if (string.IsNullOrWhiteSpace(version))
+                    return false;
+
+                // 主版本号
+                string major = version.Split('.')[0];
+
+                return major == "3";
+            }
+            catch
+            {
+                return false;
+            }
         }
+
 
         private bool IsRgssGame(string gameExe)
         {
