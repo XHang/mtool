@@ -55,6 +55,7 @@
       <DependentUpon>AutoInjectSettingsView.xaml</DependentUpon>
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="symbollink.cs" />
   </ItemGroup>
   <ItemGroup>
     <Page Include="AutoInjectSettingsView.xaml">
