@@ -286,18 +286,36 @@ namespace AutoInjectPlugin
         private bool IsRgssGame(string gameExe)
         {
             var dir = Path.GetDirectoryName(gameExe);
-            if (dir == null) return false;
+            if (dir == null)
+                return false;
 
+            // ① 判断是否存在 RGSS 加密包
             string[] archives = { "Game.rgssad", "Game.rgss2a", "Game.rgss3a" };
             if (archives.Any(a => File.Exists(Path.Combine(dir, a))))
                 return true;
 
-            string[] dlls = { "RGSS100J.dll", "RGSS202E.dll", "RGSS301.dll" };
-            if (dlls.Any(d => File.Exists(Path.Combine(dir, d))))
+            // ② 判断是否存在包含 RGSS 的 DLL
+            if (Directory.EnumerateFiles(dir, "*.dll")
+                         .Any(f => Path.GetFileName(f)
+                         .Contains("RGSS")))
                 return true;
+
+            // ③ 判断 EXE 的 File Description 是否包含 RGSS
+            try
+            {
+                var info = FileVersionInfo.GetVersionInfo(gameExe);
+                if (!string.IsNullOrEmpty(info.FileDescription) &&
+                    info.FileDescription.Contains("RGSS"))
+                    return true;
+            }
+            catch
+            {
+                // 忽略异常，继续返回 false
+            }
 
             return false;
         }
+
 
         private void ApplyInjectConfiguration(Game game, string gameExe, string dllPath)
         {
