@@ -186,60 +186,20 @@ namespace AutoInjectPlugin
 
         private void CreateJunction(string link, string target)
         {
-            link = Path.GetFullPath(link).Replace('/', '\\');
-            target = Path.GetFullPath(target).Replace('/', '\\');
+            if (Directory.Exists(link))
+                Directory.Delete(link);
 
-            // 目标路径不存在
-            if (!Directory.Exists(target))
+            Directory.CreateDirectory(Path.GetDirectoryName(link));
+
+            var psi = new ProcessStartInfo("cmd.exe",
+                $"/c mklink /J \"{link}\" \"{target}\"")
             {
-                string msg =
-                    $"目标路径不存在：\n{target}\n\n" +
-                    $"SessionId: {System.Diagnostics.Process.GetCurrentProcess().SessionId}\n" +
-                    $"User: {Environment.UserName}\n" +
-                    $"CurrentDir: {Environment.CurrentDirectory}\n";
+                CreateNoWindow = true,
+                UseShellExecute = false
+            };
 
-                PlayniteApi.Dialogs.ShowErrorMessage(msg, "创建符号链接失败");
-                throw new InvalidOperationException(msg);
-            }
-
-            // 创建符号链接
-            if (!SymlinkHelper.CreateDirectorySymlink(link, target, out string err))
-            {
-                string msg =
-                    $"CreateSymbolicLink 失败：\n{err}\n\n" +
-                    $"链接路径: {link}\n" +
-                    $"目标路径: {target}\n\n" +
-                    $"SessionId: {System.Diagnostics.Process.GetCurrentProcess().SessionId}\n" +
-                    $"User: {Environment.UserName}\n" +
-                    $"CurrentDir: {Environment.CurrentDirectory}\n" +
-                    $"父目录存在: {Directory.Exists(Path.GetDirectoryName(link))}\n" +
-                    $"目标目录存在: {Directory.Exists(target)}\n";
-
-                PlayniteApi.Dialogs.ShowErrorMessage(msg, "创建符号链接失败");
-                throw new InvalidOperationException(msg);
-            }
-
-            // 二次验证
-            if (!Directory.Exists(link))
-            {
-                string msg =
-                    $"符号链接创建后不存在：\n{link}\n\n" +
-                    $"SessionId: {System.Diagnostics.Process.GetCurrentProcess().SessionId}\n" +
-                    $"User: {Environment.UserName}\n" +
-                    $"CurrentDir: {Environment.CurrentDirectory}\n" +
-                    $"父目录存在: {Directory.Exists(Path.GetDirectoryName(link))}\n" +
-                    $"目标目录存在: {Directory.Exists(target)}\n";
-
-                PlayniteApi.Dialogs.ShowErrorMessage(msg, "创建符号链接失败");
-                throw new InvalidOperationException(msg);
-            }
+            Process.Start(psi)?.WaitForExit();
         }
-
-
-
-
-
-
 
         // ============================================================
 
