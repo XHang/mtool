@@ -28,6 +28,58 @@ namespace AutoInjectPlugin
             };
         }
 
+        private void UninstallGame(Game game)
+        {
+            if (game == null)
+                return;
+
+            string installDir = game.InstallDirectory;
+            if (string.IsNullOrWhiteSpace(installDir) || !Directory.Exists(installDir))
+            {
+                PlayniteApi.Dialogs.ShowErrorMessage("无法找到该游戏的安装目录，无法卸载。", "卸载失败");
+                return;
+            }
+
+            // 防止误删根目录
+            var root = Path.GetPathRoot(installDir)?.TrimEnd('\\', '/');
+            var trimmed = installDir.TrimEnd('\\', '/');
+            if (!string.IsNullOrEmpty(root) && string.Equals(root, trimmed, StringComparison.OrdinalIgnoreCase))
+            {
+                PlayniteApi.Dialogs.ShowErrorMessage("检测到安装目录为根目录，出于安全考虑已取消卸载。", "卸载被取消");
+                return;
+            }
+
+            var result = PlayniteApi.Dialogs.ShowMessage(
+                $"确定要删除以下文件夹及其所有内容吗？\n{installDir}",
+                "卸载游戏",
+                MessageBoxButton.YesNo
+            );
+
+            if (result != MessageBoxResult.Yes)
+                return;
+
+            try
+            {
+                Directory.Delete(installDir, true);
+
+                // 从 Playnite 库中删除该游戏
+                try
+                {
+                    PlayniteApi.Database.Games.Remove(game);
+                }
+                catch
+                {
+                    // 如果删除数据库项失败，仍向用户报告文件已删除
+                }
+
+                PlayniteApi.Dialogs.ShowMessage("安装目录已删除，游戏已从库中移除。", "卸载完成");
+            }
+            catch (Exception ex)
+            {
+                PlayniteApi.Dialogs.ShowErrorMessage($"删除安装目录时发生错误：{ex.Message}", "卸载失败");
+            }
+        }
+
         public override IEnumerable<GameMenuItem> GetGameMenuItems(GetGameMenuItemsArgs args)
         {
             if (!args.Games.Any())
@@ -39,6 +91,11 @@ namespace AutoInjectPlugin
                 {
                     Description = "使用 MTool 注入器启动（配置此游戏）",
                     Action = a => ConfigureGameForInject(args.Games.First())
+                },
+                new GameMenuItem
+                {
+                    Description = "卸载游戏（删除安装目录）",
+                    Action = a => UninstallGame(args.Games.First())
                 }
             };
         }
