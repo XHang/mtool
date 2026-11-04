@@ -94,10 +94,62 @@ namespace AutoInjectPlugin
                 },
                 new GameMenuItem
                 {
+                    Description = "转区（Locale Emulator）",
+                    Action = a => ConfigureGameForLocaleEmulator(args.Games.First())
+                },
+                new GameMenuItem
+                {
                     Description = "卸载游戏（删除安装目录）",
                     Action = a => UninstallGame(args.Games.First())
                 }
             };
+        }
+
+        private void ConfigureGameForLocaleEmulator(Game game)
+        {
+            if (game == null)
+                return;
+
+            var s = settingss.Settings;
+            if (string.IsNullOrWhiteSpace(s.LocaleEmulatorPath))
+            {
+                PlayniteApi.Dialogs.ShowErrorMessage("请先配置 Locale Emulator 路径。", "转区失败");
+                return;
+            }
+
+            if (game.GameActions == null || !game.GameActions.Any())
+            {
+                PlayniteApi.Dialogs.ShowErrorMessage("该游戏没有启动指令，无法执行转区。", "转区失败");
+                return;
+            }
+
+            string installDir = game.InstallDirectory;
+            if (string.IsNullOrWhiteSpace(installDir))
+            {
+                PlayniteApi.Dialogs.ShowErrorMessage("无法找到该游戏的安装目录，无法执行转区。", "转区失败");
+                return;
+            }
+
+            var action = game.GameActions.First();
+            if (action == null || string.IsNullOrWhiteSpace(action.Path))
+            {
+                PlayniteApi.Dialogs.ShowErrorMessage("该游戏启动指令为空，无法执行转区。", "转区失败");
+                return;
+            }
+
+            string originalValue = action.Path.Replace("{InstallDir}", string.Empty);
+            string relativeValue = originalValue.TrimStart('\\', '/');
+            string arguments = installDir.TrimEnd('\\', '/') +
+                (string.IsNullOrEmpty(relativeValue) ? string.Empty : "\\") +
+                relativeValue;
+
+            action.Path = s.LocaleEmulatorPath;
+            action.Arguments = arguments;
+            action.WorkingDir = Path.GetDirectoryName(s.LocaleEmulatorPath);
+            action.IsPlayAction = true;
+
+            PlayniteApi.Database.Games.Update(game);
+            PlayniteApi.Dialogs.ShowMessage("转区配置完成。", "转区成功");
         }
 
         private void ConfigureGameForInject(Game game)

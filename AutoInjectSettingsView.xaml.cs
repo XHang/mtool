@@ -45,7 +45,7 @@ namespace AutoInjectPlugin
             var fileDialog = new OpenFileDialog();
 
             // exe 字段
-            if (field == "InjectorPath" || field == "NwPath")
+            if (field == "InjectorPath" || field == "NwPath" || field == "LocaleEmulatorPath")
             {
                 fileDialog.Filter = "可执行文件 (*.exe)|*.exe|所有文件 (*.*)|*.*";
             }
@@ -69,6 +69,7 @@ namespace AutoInjectPlugin
                     case "RGSSDDL": vm.Settings.RGSSDDL = file; break;
                     case "RGSSDDL64": vm.Settings.RGSSDDL64 = file; break;
                     case "NwPath": vm.Settings.NwPath = file; break;
+                    case "LocaleEmulatorPath": vm.Settings.LocaleEmulatorPath = file; break;
                 }
             }
         }

@@ -35,6 +35,9 @@ namespace AutoInjectPlugin
         private string nwDir = "";
         public string NwDir { get => nwDir; set => SetValue(ref nwDir, value); }
 
+        private string localeEmulatorPath = @"D:\Locale.Emulator.2.4.0.0\LEProc.exe";
+        public string LocaleEmulatorPath { get => localeEmulatorPath; set => SetValue(ref localeEmulatorPath, value); }
+
         private string tempFolder = "";
         public string TempFolder { get => tempFolder; set => SetValue(ref tempFolder, value); }
     }
