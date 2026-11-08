@@ -139,9 +139,10 @@ namespace AutoInjectPlugin
 
             string originalValue = action.Path.Replace("{InstallDir}", string.Empty);
             string relativeValue = originalValue.TrimStart('\\', '/');
-            string arguments = installDir.TrimEnd('\\', '/') +
+            string combined = installDir.TrimEnd('\\', '/') +
                 (string.IsNullOrEmpty(relativeValue) ? string.Empty : "\\") +
                 relativeValue;
+            string arguments = "\"" + combined + "\"";
 
             action.Path = s.LocaleEmulatorPath;
             action.Arguments = arguments;
