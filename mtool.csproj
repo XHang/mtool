@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -54,10 +54,16 @@
     <Compile Include="AutoInjectSettingsView.xaml.cs">
       <DependentUpon>AutoInjectSettingsView.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="DuplicateGameView.xaml.cs">
+		<DependentUpon>DuplicateGameView.xaml</DependentUpon>
+	</Compile>
+	<Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <Page Include="AutoInjectSettingsView.xaml">
+    <Page Include="DuplicateGameView.xaml">
+		<Generator>MSBuild:Compile</Generator>
+	</Page> 
+	  <Page Include="AutoInjectSettingsView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
   </ItemGroup>

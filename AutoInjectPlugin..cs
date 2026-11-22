@@ -28,6 +28,19 @@ namespace AutoInjectPlugin
             };
         }
 
+        public override IEnumerable<SidebarItem> GetSidebarItems()
+        {
+            return new List<SidebarItem>
+            {
+                new SidebarItem
+                {
+                    Title = "检查重复游戏",
+                    Type = SiderbarItemType.View,
+                    Opened = () => new DuplicateGameView(PlayniteApi)
+                }
+            };
+        }
+
         private void UninstallGame(Game game)
         {
             if (game == null)
