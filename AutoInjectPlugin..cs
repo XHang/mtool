@@ -36,6 +36,13 @@ namespace AutoInjectPlugin
                 {
                     Title = "检查重复游戏",
                     Type = SiderbarItemType.View,
+                    Icon = new System.Windows.Controls.TextBlock
+                    {
+                        Text = "查重",
+                        FontSize = 12,
+                        TextAlignment = System.Windows.TextAlignment.Center
+                    },
+                    IconPadding = new System.Windows.Thickness(2),
                     Opened = () => new DuplicateGameView(PlayniteApi)
                 }
             };
